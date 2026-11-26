@@ -24,7 +24,11 @@ button{cursor:pointer}
 .in{height:44px;width:100%;border-radius:12px;background:#0d0d10;border:1px solid #26262c;padding:0 14px;font-size:14px}
 .in::placeholder{color:#8a8a93}
 .ls{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto;padding-right:4px}
-.it{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-radius:12px;background:#0b0b0e;border:1px solid #1f1f24;text-align:left}
+.it{display:flex;align-items:center;gap:6px;min-height:44px;padding:4px 8px 4px 4px;border-radius:12px;background:#0b0b0e;border:1px solid #1f1f24}
+.sel{flex:1;display:flex;align-items:center;min-height:36px;padding:0 8px;background:none;border:0;border-radius:10px;text-align:left;overflow-wrap:anywhere}
+.rk{width:30px;color:#8a8a93;font-size:13px;text-align:center;flex:none}
+.si{width:64px;height:36px;border-radius:8px;background:#0d0d10;border:1px solid #26262c;text-align:center;flex:none}
+#best{color:#c8ff3d;font-size:14px}
 .it.on{border-color:#c8ff3d;background:#10120a}
 .it span{overflow-wrap:anywhere}.it small{color:#8a8a93;flex:none}
 .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
@@ -42,9 +46,10 @@ h2{margin:0;font-size:15px;color:#f2f2f3}
 <label class="b" style="flex-direction:row;align-items:center;cursor:pointer">Open players.json<input type="file" id="file" accept=".json" hidden></label>
 <button class="b p" id="dl">Download players.json</button>
 </div>
+<div class="bar" id="tabs"></div>
 <p class="note" id="msg"></p>
 <div class="cols">
-<div class="side"><input class="in" id="q" placeholder="Search players…" aria-label="Search players" autocomplete="off"><div class="ls" id="ls"></div></div>
+<div class="side"><input class="in" id="q" placeholder="Search players…" aria-label="Search players" autocomplete="off"><p class="note" id="best"></p><div class="ls" id="ls"></div></div>
 <div class="main" id="form"><p class="hint">Pick a player on the left.</p></div>
 </div>
 </main>
@@ -53,14 +58,20 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const FK=[['overall','Overall'],['bounce','Bounce (BNC)'],['nobounce','Corner cutting (CC)'],['cam','Camera (CAM)'],['consistency','Consistency (CONS)']];
 const SC=[['bounce','Bounce (BNC)'],['nobounce','Corner cutting (CC)'],['cam','Camera (CAM)'],['consistency','Consistency (CONS)']];
-let P=[],cur=null,API='https://users.roproxy.com';
+let P=[],cur=null,tab='all',API='https://users.roproxy.com';
 const blank=()=>({id:'',name:'',display:'',bounce:0,nobounce:0,consistency:0,cam:0,device:'PC',youtube:'',region:'',status:'active',country:'',tower:'',obby:'',flames:{overall:false,bounce:false,nobounce:false,cam:false,consistency:false}});
 const tot=p=>SC.reduce((a,[k])=>a+(+p[k]||0),0);
 const say=t=>$('#msg').textContent=t;
+const NM={all:'Overall',bounce:'Bounce',nobounce:'Corner cutting',cam:'Camera control',consistency:'Consistency'};
+const val=p=>tab==='all'?tot(p):(+p[tab]||0);
+const nm=p=>p.display||p.name||'New player';
+function tabs(){$('#tabs').innerHTML=[['all','Overall'],['bounce','BNC'],['nobounce','CC'],['cam','CAM'],['consistency','CONS']].map(([k,l])=>`<button class="b ${tab===k?'p':''}" data-tab="${k}">${l}</button>`).join('')}
 function list(){
  const q=$('#q').value.trim().toLowerCase();
- const V=[...P].filter(p=>!q||[p.name,p.display,p.id].some(x=>String(x||'').toLowerCase().includes(q))).sort((a,b)=>tot(b)-tot(a));
- $('#ls').innerHTML=V.map(p=>`<button class="it ${p===cur?'on':''}" data-i="${P.indexOf(p)}"><span>${esc(p.display||p.name||'New player')}</span><small>${tot(p)}</small></button>`).join('')||'<p class="hint">No players found.</p>';
+ const R=[...P].sort((a,b)=>val(b)-val(a)),t=R[0];
+ $('#best').textContent=t?(val(t)>0?`Best in ${NM[tab].toLowerCase()}: ${nm(t)} (${val(t)})`:`No ${NM[tab].toLowerCase()} points yet`):'';
+ const V=R.map((p,i)=>[p,i+1]).filter(([p])=>!q||[p.name,p.display,p.id].some(x=>String(x||'').toLowerCase().includes(q)));
+ $('#ls').innerHTML=V.map(([p,r])=>{const i=P.indexOf(p);return`<div class="it ${p===cur?'on':''}"><span class="rk">${r}</span><button class="sel" data-i="${i}">${esc(nm(p))}</button>${tab==='all'?`<small>${val(p)}</small>`:`<input class="si" type="number" min="0" max="100" value="${val(p)}" data-si="${i}" aria-label="${esc(nm(p))} ${NM[tab]} points">`}</div>`}).join('')||'<p class="hint">No players found.</p>';
 }
 const sel=(k,opts,v)=>`<select class="in" data-k="${k}">${opts.map(([o,l])=>`<option value="${o}" ${String(v)===String(o)?'selected':''}>${l}</option>`).join('')}</select>`;
 function form(){
@@ -90,8 +101,9 @@ document.addEventListener('input',e=>{
  else cur[k]=v;
  list()});
 document.addEventListener('click',async e=>{
- const it=e.target.closest('.it'),id=e.target.id;
- if(it){cur=P[+it.dataset.i];list();form()}
+ const it=e.target.closest('[data-i]'),tb=e.target.closest('[data-tab]'),id=e.target.id;
+ if(tb){tab=tb.dataset.tab;tabs();list()}
+ else if(it){cur=P[+it.dataset.i];list();form()}
  else if(id==='add'){cur=blank();P.push(cur);$('#q').value='';list();form();say('New player added. Fill in the user ID, then download when done.')}
  else if(id==='del'&&cur&&confirm('Delete '+(cur.display||cur.name||'this player')+'?')){P.splice(P.indexOf(cur),1);cur=null;list();form()}
  else if(id==='fetch'&&cur){
@@ -102,13 +114,15 @@ document.addEventListener('click',async e=>{
   const t='[\n'+P.map(p=>'  '+JSON.stringify(p)).join(',\n')+'\n]\n';
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='players.json';a.click();
   say('Downloaded. Upload it to your repo to replace players.json.')}});
+document.addEventListener('input',e=>{const i=e.target.dataset.si;if(i!==undefined)P[+i][tab]=parseInt(e.target.value)||0});
+document.addEventListener('change',e=>{const i=e.target.dataset.si;if(i===undefined)return;P[+i][tab]=Math.max(0,Math.min(100,parseInt(e.target.value)||0));list();if(cur===P[+i])form()});
 $('#file').addEventListener('change',async e=>{
  try{P=JSON.parse(await e.target.files[0].text());cur=null;list();form();say('Loaded '+P.length+' players.')}catch{say('That file isn’t valid JSON.')}});
 (async()=>{
  try{API=(await fetch('config.json').then(r=>r.json())).roblox.users||API}catch{}
  try{P=await fetch('players.json').then(r=>r.json());P.forEach(p=>{p.id=String(p.id);p.flames=p.flames||{}});say('Loaded '+P.length+' players.')}
  catch{say('Couldn’t load players.json here. Use “Open players.json” to pick the file.')}
- list()})();
+ tabs();list()})();
 </script>
 </body>
 </html>
